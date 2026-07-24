@@ -29,12 +29,14 @@ git pull
 conda activate medicalgpt
 
 export HF_HOME=/root/autodl-tmp/hf-cache
+export HF_ENDPOINT=https://hf-mirror.com
 mkdir -p "$HF_HOME"
 ```
 
 The preparation command uses Hugging Face streaming. It does not require a
 manual dataset download, but Hugging Face will still cache streamed files under
-`HF_HOME`.
+`HF_HOME`. The mirror endpoint is required on AutoDL regions that cannot reach
+the Hugging Face origin directly.
 
 ## 2. Stream and convert 100 HuatuoGPT-o1 samples
 

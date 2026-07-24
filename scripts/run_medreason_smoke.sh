@@ -6,8 +6,10 @@ SFT_ADAPTER="${SFT_ADAPTER:-outputs/sft-smoke-qwen25-3b-v2}"
 DATA_ROOT="${DATA_ROOT:-data/medreason/smoke}"
 AUDIT_ROOT="${AUDIT_ROOT:-outputs/medreason-smoke/audit}"
 HF_HOME="${HF_HOME:-/root/autodl-tmp/hf-cache}"
+HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 
 export HF_HOME
+export HF_ENDPOINT
 
 if [[ ! -d "${BASE_MODEL}" ]]; then
   echo "Base model directory not found: ${BASE_MODEL}" >&2
