@@ -6,7 +6,7 @@
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Sequence
 import re
 from datasets import load_dataset
 import torch
@@ -15,7 +15,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.integrations import is_deepspeed_zero3_enabled
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, TrlParser
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 
@@ -39,12 +39,25 @@ class ScriptArguments:
     train_file_dir: Optional[str] = field(
         default=None, metadata={"help": "Directory containing training files for local datasets."}
     )
+    validation_file_dir: Optional[str] = field(
+        default=None, metadata={"help": "Directory containing validation JSON/JSONL files."}
+    )
     train_samples: Optional[int] = field(default=-1, metadata={"help": "Number of samples to train on, -1 for all"})
+    eval_samples: Optional[int] = field(default=-1, metadata={"help": "Number of validation samples, -1 for all"})
     subset_name: Optional[str] = field(default="main",
                                        metadata={"help": "Subset name, e.g., 'default', 'main'. default is 'default'"})
     dataset_splits: Optional[str] = field(default="train", metadata={"help": "Split name"})
     preprocessing_num_workers: Optional[int] = field(default=10,
                                                      metadata={"help": "Number of workers for preprocessing"})
+    dataset_seed: int = field(default=42, metadata={"help": "Seed used for sampling and fallback splitting."})
+    validation_size: float = field(
+        default=0.1,
+        metadata={"help": "Fallback validation fraction when no validation_file_dir is supplied."},
+    )
+    peft_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Existing PEFT adapter to continue training."},
+    )
     # QLoRA arguments
     qlora: bool = field(default=False, metadata={"help": "Whether to use qlora"})
 
@@ -165,7 +178,11 @@ def find_all_linear_names(peft_model, int4=False, int8=False):
 
 
 def grpo_train(
-        model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
+        model_args: ModelConfig,
+        script_args: ScriptArguments,
+        training_args: GRPOConfig,
+        reward_funcs: Optional[Sequence[Callable]] = None,
+        system_prompt: str = SYSTEM_PROMPT,
 ):
     # Add distributed training initialization
     is_main_process = training_args.local_rank in [-1, 0]
@@ -194,7 +211,9 @@ def grpo_train(
         tokenizer.pad_token = tokenizer.eos_token
 
     # Load datasets
-    if script_args.train_file_dir and os.path.exists(script_args.train_file_dir):
+    if script_args.train_file_dir:
+        if not os.path.exists(script_args.train_file_dir):
+            raise FileNotFoundError(f"train_file_dir does not exist: {script_args.train_file_dir}")
         # Load from local directory
         dataset = load_dataset("json", data_dir=script_args.train_file_dir, split="train")
     else:
@@ -202,14 +221,30 @@ def grpo_train(
         dataset = load_dataset(script_args.dataset_name, script_args.subset_name, split=script_args.dataset_splits)
 
     if script_args.train_samples > 0:
-        dataset = dataset.shuffle(seed=42).select(range(script_args.train_samples))
+        dataset = dataset.shuffle(seed=script_args.dataset_seed).select(
+            range(min(script_args.train_samples, len(dataset)))
+        )
+
+    validation_dataset = None
+    if script_args.validation_file_dir:
+        if not os.path.exists(script_args.validation_file_dir):
+            raise FileNotFoundError(
+                f"validation_file_dir does not exist: {script_args.validation_file_dir}"
+            )
+        validation_dataset = load_dataset(
+            "json", data_dir=script_args.validation_file_dir, split="train"
+        )
+        if script_args.eval_samples > 0:
+            validation_dataset = validation_dataset.shuffle(seed=script_args.dataset_seed).select(
+                range(min(script_args.eval_samples, len(validation_dataset)))
+            )
 
     # Prepare dataset
     with training_args.main_process_first(desc="Dataset preparation"):
         dataset = dataset.map(
             lambda x: {
                 'prompt': [
-                    {'role': 'system', 'content': SYSTEM_PROMPT},
+                    {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': x['question']}
                 ],
                 'answer': x['answer']
@@ -218,10 +253,36 @@ def grpo_train(
             desc="Processing dataset" if is_main_process else None,
         )
 
-    # Split dataset
-    train_test_split = dataset.train_test_split(test_size=0.1)
-    train_dataset = train_test_split["train"]
-    test_dataset = train_test_split["test"]
+        if validation_dataset is not None:
+            validation_dataset = validation_dataset.map(
+                lambda x: {
+                    'prompt': [
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': x['question']}
+                    ],
+                    'answer': x['answer']
+                },
+                num_proc=script_args.preprocessing_num_workers,
+                desc="Processing validation dataset" if is_main_process else None,
+            )
+
+    # Prefer an explicit validation directory. Only use a seeded fallback split
+    # when evaluation is requested and no validation data was supplied.
+    if validation_dataset is not None:
+        train_dataset = dataset
+        test_dataset = validation_dataset
+    elif training_args.eval_strategy != "no":
+        if not 0.0 < script_args.validation_size < 1.0:
+            raise ValueError("validation_size must be between 0 and 1.")
+        train_test_split = dataset.train_test_split(
+            test_size=script_args.validation_size,
+            seed=script_args.dataset_seed,
+        )
+        train_dataset = train_test_split["train"]
+        test_dataset = train_test_split["test"]
+    else:
+        train_dataset = dataset
+        test_dataset = None
 
     if is_main_process:
         logger.info("*** Initializing model kwargs ***")
@@ -352,29 +413,47 @@ def grpo_train(
                 break
 
     # Configure LoRA if enabled
+    if script_args.peft_path and not model_args.use_peft:
+        raise ValueError("--peft_path requires --use_peft True.")
+
     if model_args.use_peft:
         if is_main_process:
             logger.info("Fine-tuning method: LoRA(PEFT)")
         if training_args.gradient_checkpointing:
             logger.warning("Gradient checkpointing is enabled. It may cause issues with LoRA, setting it to False.")
             training_args.gradient_checkpointing = False
-        target_modules = model_args.lora_target_modules if model_args.lora_target_modules else None
-        if target_modules == 'all' or (target_modules and 'all' in target_modules):
-            target_modules = find_all_linear_names(model, int4=model_args.load_in_4bit, int8=model_args.load_in_8bit)
-        if is_main_process:
-            logger.info(f"Peft target_modules: {target_modules}, lora rank: {model_args.lora_r}, ")
-        peft_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            target_modules=target_modules,
-            inference_mode=False,
-            r=model_args.lora_r,
-            lora_alpha=model_args.lora_alpha,
-            lora_dropout=model_args.lora_dropout,
-        )
-        model = get_peft_model(model, peft_config)
-        # Fixed FP16 ValueError for quantized models
-        for param in filter(lambda p: p.requires_grad, model.parameters()):
-            param.data = param.data.to(torch.float32)
+        if script_args.peft_path:
+            if not os.path.exists(script_args.peft_path):
+                raise FileNotFoundError(f"peft_path does not exist: {script_args.peft_path}")
+            if is_main_process:
+                logger.info(f"Continuing PEFT adapter from: {script_args.peft_path}")
+            model = PeftModel.from_pretrained(
+                model,
+                script_args.peft_path,
+                is_trainable=True,
+            )
+        else:
+            target_modules = model_args.lora_target_modules if model_args.lora_target_modules else None
+            if target_modules == 'all' or (target_modules and 'all' in target_modules):
+                target_modules = find_all_linear_names(
+                    model,
+                    int4=model_args.load_in_4bit,
+                    int8=model_args.load_in_8bit,
+                )
+            if is_main_process:
+                logger.info(f"Peft target_modules: {target_modules}, lora rank: {model_args.lora_r}, ")
+            peft_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                target_modules=target_modules,
+                inference_mode=False,
+                r=model_args.lora_r,
+                lora_alpha=model_args.lora_alpha,
+                lora_dropout=model_args.lora_dropout,
+            )
+            model = get_peft_model(model, peft_config)
+            # Fixed FP16 ValueError for newly initialized adapters.
+            for param in filter(lambda p: p.requires_grad, model.parameters()):
+                param.data = param.data.to(torch.float32)
         model.print_trainable_parameters()
     else:
         if is_main_process:
@@ -389,13 +468,14 @@ def grpo_train(
         logger.info("Gradient checkpointing disabled.")
 
     # Initialize GRPO trainer with distributed training support
+    active_reward_funcs = list(reward_funcs) if reward_funcs is not None else [
+        accuracy_reward,
+        format_reward,
+    ]
     trainer = GRPOTrainer(
         model=model,
         processing_class=tokenizer,
-        reward_funcs=[
-            accuracy_reward,
-            format_reward
-        ],
+        reward_funcs=active_reward_funcs,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=test_dataset if training_args.eval_strategy != "no" else None,
