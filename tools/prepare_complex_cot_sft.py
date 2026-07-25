@@ -11,7 +11,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -58,6 +58,26 @@ def length_summary(values: list[int]) -> dict[str, float | int]:
     }
 
 
+def token_id_length(tokenized: Any) -> int:
+    """Count one encoded sequence across Transformers return shapes."""
+    if isinstance(tokenized, Mapping):
+        if "input_ids" not in tokenized:
+            raise ValueError("chat_template_result_missing_input_ids")
+        tokenized = tokenized["input_ids"]
+    if hasattr(tokenized, "shape"):
+        shape = tuple(tokenized.shape)
+        if not shape:
+            return 0
+        return int(shape[-1])
+    if isinstance(tokenized, (list, tuple)):
+        if tokenized and isinstance(tokenized[0], (list, tuple)):
+            if len(tokenized) != 1:
+                raise ValueError("chat_template_returned_multiple_sequences")
+            return len(tokenized[0])
+        return len(tokenized)
+    raise TypeError(f"Unsupported chat template output: {type(tokenized).__name__}")
+
+
 def count_chat_tokens(tokenizer: Any, sft_row: dict[str, Any]) -> int:
     messages = [{"role": "system", "content": sft_row["system_prompt"]}]
     messages.extend(
@@ -67,12 +87,12 @@ def count_chat_tokens(tokenizer: Any, sft_row: dict[str, Any]) -> int:
         }
         for turn in sft_row["conversations"]
     )
-    token_ids = tokenizer.apply_chat_template(
+    tokenized = tokenizer.apply_chat_template(
         messages,
         tokenize=True,
         add_generation_prompt=False,
     )
-    return len(token_ids)
+    return token_id_length(tokenized)
 
 
 def file_sha256(path: Path) -> str:
