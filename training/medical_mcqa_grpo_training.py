@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Train verifiable medical reasoning with MedicalGPT's GRPO backbone."""
+"""Train MedQA/MedMCQA with a strict canonical-option GRPO reward."""
 
 import sys
 from pathlib import Path
@@ -10,12 +10,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from trl import GRPOConfig, ModelConfig, TrlParser
 
-from medreason.prompts import MEDICAL_REASONING_SYSTEM_PROMPT
-from medreason.rewards import medical_accuracy_reward, medical_format_reward
+from medreason.prompts import MEDICAL_MCQA_SYSTEM_PROMPT
+from medreason.rewards import medical_format_reward, medical_mcqa_accuracy_reward
 from training.grpo_training import ScriptArguments, grpo_train
-
-
-MEDICAL_SYSTEM_PROMPT = MEDICAL_REASONING_SYSTEM_PROMPT
 
 
 def weighted_medical_format_reward(completions, **kwargs):
@@ -30,10 +27,10 @@ def main() -> None:
         script_args,
         training_args,
         reward_funcs=[
-            medical_accuracy_reward,
+            medical_mcqa_accuracy_reward,
             weighted_medical_format_reward,
         ],
-        system_prompt=MEDICAL_SYSTEM_PROMPT,
+        system_prompt=MEDICAL_MCQA_SYSTEM_PROMPT,
     )
 
 

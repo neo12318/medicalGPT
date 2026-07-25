@@ -19,6 +19,9 @@ _ANSWER_ONLY_RE = re.compile(
 _OPTION_PREFIX_RE = re.compile(r"^\s*([A-H])\s*[\.\):：、-]\s*(.+?)\s*$", flags=re.IGNORECASE)
 
 
+_STRICT_MCQA_LABEL_RE = re.compile(r"^[A-D]$", flags=re.IGNORECASE)
+
+
 def completion_content(completion: Any) -> str:
     """Return text from the completion shapes accepted by TRL reward functions."""
     if completion is None:
@@ -113,3 +116,31 @@ def medical_format_reward(
         float(format_weight) if is_valid_reasoning_format(completion) else 0.0
         for completion in completions
     ]
+
+
+def extract_mcqa_label(text: Any) -> str | None:
+    """Return A-D only when the answer block contains one unambiguous label."""
+    answer = unicodedata.normalize("NFKC", extract_answer(text)).strip()
+    if not _STRICT_MCQA_LABEL_RE.fullmatch(answer):
+        return None
+    return answer.upper()
+
+
+def medical_mcqa_accuracy_reward(
+    completions: Iterable[Any],
+    answer: Iterable[Any],
+    **_: Any,
+) -> list[float]:
+    """Strict outcome reward for canonical four-option medical questions."""
+    rewards: list[float] = []
+    for completion, reference in zip(completions, answer):
+        prediction_label = extract_mcqa_label(completion_content(completion))
+        reference_label = extract_mcqa_label(reference)
+        rewards.append(
+            1.0
+            if prediction_label is not None
+            and reference_label is not None
+            and prediction_label == reference_label
+            else 0.0
+        )
+    return rewards
