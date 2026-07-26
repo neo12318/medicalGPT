@@ -10,6 +10,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from trl import GRPOConfig, ModelConfig, TrlParser
 
+from medreason.grpo_audit import AuditedGRPOTrainer
 from medreason.prompts import MEDICAL_MCQA_SYSTEM_PROMPT
 from medreason.rewards import medical_format_reward, medical_mcqa_accuracy_reward
 from training.grpo_training import ScriptArguments, grpo_train
@@ -22,6 +23,12 @@ def weighted_medical_format_reward(completions, **kwargs):
 def main() -> None:
     parser = TrlParser((ModelConfig, ScriptArguments, GRPOConfig))
     model_args, script_args, training_args = parser.parse_args_and_config()
+    trainer_kwargs = {}
+    if script_args.rollout_audit_file or script_args.hard_buffer_file:
+        trainer_kwargs = {
+            "audit_file": script_args.rollout_audit_file,
+            "hard_buffer_file": script_args.hard_buffer_file,
+        }
     grpo_train(
         model_args,
         script_args,
@@ -31,6 +38,8 @@ def main() -> None:
             weighted_medical_format_reward,
         ],
         system_prompt=MEDICAL_MCQA_SYSTEM_PROMPT,
+        trainer_cls=AuditedGRPOTrainer,
+        trainer_kwargs=trainer_kwargs,
     )
 
 

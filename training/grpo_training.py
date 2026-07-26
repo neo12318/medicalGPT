@@ -6,7 +6,7 @@
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, Optional, Sequence, Type
 import re
 from datasets import load_dataset
 import torch
@@ -57,6 +57,14 @@ class ScriptArguments:
     peft_path: Optional[str] = field(
         default=None,
         metadata={"help": "Existing PEFT adapter to continue training."},
+    )
+    rollout_audit_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional JSONL path for per-group rollout audits during training."},
+    )
+    hard_buffer_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional JSONL path for all-wrong prompt groups collected during training."},
     )
     # QLoRA arguments
     qlora: bool = field(default=False, metadata={"help": "Whether to use qlora"})
@@ -183,6 +191,8 @@ def grpo_train(
         training_args: GRPOConfig,
         reward_funcs: Optional[Sequence[Callable]] = None,
         system_prompt: str = SYSTEM_PROMPT,
+        trainer_cls: Type[GRPOTrainer] = GRPOTrainer,
+        trainer_kwargs: Optional[Dict[str, Any]] = None,
 ):
     # Add distributed training initialization
     is_main_process = training_args.local_rank in [-1, 0]
@@ -472,13 +482,14 @@ def grpo_train(
         accuracy_reward,
         format_reward,
     ]
-    trainer = GRPOTrainer(
+    trainer = trainer_cls(
         model=model,
         processing_class=tokenizer,
         reward_funcs=active_reward_funcs,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=test_dataset if training_args.eval_strategy != "no" else None,
+        **(trainer_kwargs or {}),
     )
     logger.info("*** GRPO Trainer initialized ***")
     logger.debug(f"Trainer: {trainer}")
