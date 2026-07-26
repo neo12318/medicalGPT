@@ -21,6 +21,7 @@ MAX_COMPLETION_LENGTH="${MAX_COMPLETION_LENGTH:-768}"
 LOGGING_STEPS="${LOGGING_STEPS:-5}"
 SAVE_STEPS="${SAVE_STEPS:-100}"
 LEARNING_RATE="${LEARNING_RATE:-5e-7}"
+USE_TRANSFORMERS_PAGED="${USE_TRANSFORMERS_PAGED:-False}"
 SEED="${SEED:-42}"
 
 AUDIT_DIR="${OUTPUT_DIR}/audit"
@@ -96,6 +97,7 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --epsilon 0.2 \
   --num_iterations 1 \
   --use_vllm False \
+  --use_transformers_paged "${USE_TRANSFORMERS_PAGED}" \
   --temperature 0.8 \
   --top_p 0.95 \
   --num_generations "${NUM_GENERATIONS}" \
