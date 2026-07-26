@@ -65,7 +65,6 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --rollout_audit_file "${AUDIT_DIR}/groups.jsonl" \
   --hard_buffer_file "${AUDIT_DIR}/hard_buffer.jsonl" \
   --output_dir "${OUTPUT_DIR}" \
-  --overwrite_output_dir False \
   --max_steps "${MAX_STEPS}" \
   --num_train_epochs "${NUM_TRAIN_EPOCHS}" \
   --eval_strategy no \
@@ -112,4 +111,3 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --lora_r 16 \
   --lora_alpha 32 \
   --lora_dropout 0.05
-
