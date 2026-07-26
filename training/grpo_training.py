@@ -219,6 +219,9 @@ def grpo_train(
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # Decoder-only models must left-pad batched prompts so generation starts
+    # from the final real token rather than from a padding position.
+    tokenizer.padding_side = "left"
 
     # Load datasets
     if script_args.train_file_dir:
