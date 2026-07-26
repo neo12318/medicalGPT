@@ -18,8 +18,8 @@ GRADIENT_ACCUMULATION_STEPS="${GRADIENT_ACCUMULATION_STEPS:-32}"
 GENERATION_BATCH_SIZE="${GENERATION_BATCH_SIZE:-64}"
 NUM_GENERATIONS="${NUM_GENERATIONS:-4}"
 MAX_COMPLETION_LENGTH="${MAX_COMPLETION_LENGTH:-768}"
-LOGGING_STEPS="${LOGGING_STEPS:-5}"
-SAVE_STEPS="${SAVE_STEPS:-100}"
+LOGGING_STEPS="${LOGGING_STEPS:-1}"
+SAVE_STEPS="${SAVE_STEPS:-50}"
 LEARNING_RATE="${LEARNING_RATE:-5e-7}"
 USE_TRANSFORMERS_PAGED="${USE_TRANSFORMERS_PAGED:-True}"
 SEED="${SEED:-42}"
@@ -75,6 +75,7 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --logging_strategy steps \
   --logging_steps "${LOGGING_STEPS}" \
   --logging_first_step True \
+  --logging_dir "${OUTPUT_DIR}/runs" \
   --report_to tensorboard \
   --run_name medreason-e2-vanilla-grpo \
   --seed "${SEED}" \
