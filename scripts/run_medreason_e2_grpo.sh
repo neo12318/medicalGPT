@@ -13,8 +13,8 @@ OUTPUT_DIR="${OUTPUT_DIR:-outputs/medreason-e2-vanilla-grpo-qwen25-3b}"
 TRAIN_SAMPLES="${TRAIN_SAMPLES:--1}"
 MAX_STEPS="${MAX_STEPS:--1}"
 NUM_TRAIN_EPOCHS="${NUM_TRAIN_EPOCHS:-1}"
-PER_DEVICE_BATCH_SIZE="${PER_DEVICE_BATCH_SIZE:-8}"
-GRADIENT_ACCUMULATION_STEPS="${GRADIENT_ACCUMULATION_STEPS:-4}"
+PER_DEVICE_BATCH_SIZE="${PER_DEVICE_BATCH_SIZE:-2}"
+GRADIENT_ACCUMULATION_STEPS="${GRADIENT_ACCUMULATION_STEPS:-16}"
 GENERATION_BATCH_SIZE="${GENERATION_BATCH_SIZE:-32}"
 NUM_GENERATIONS="${NUM_GENERATIONS:-4}"
 MAX_COMPLETION_LENGTH="${MAX_COMPLETION_LENGTH:-768}"
@@ -89,6 +89,7 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --warmup_ratio 0.03 \
   --weight_decay 0.0 \
   --max_grad_norm 1.0 \
+  --torch_empty_cache_steps 1 \
   --loss_type grpo \
   --scale_rewards group \
   --beta 0.0 \
