@@ -7,29 +7,32 @@ INPUT_FILE="${INPUT_FILE:-data/medreason/rl_mcqa/validation/data.jsonl}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/medreason-e1-eval}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-1024}"
+NUM_SAMPLES="${NUM_SAMPLES:-}"
 
 mkdir -p "${OUTPUT_ROOT}"
 
-CUDA_VISIBLE_DEVICES=0 python tools/evaluate_medical_mcqa.py \
-  --model_name_or_path "${BASE_MODEL}" \
-  --input_file "${INPUT_FILE}" \
-  --output_file "${OUTPUT_ROOT}/base.jsonl" \
-  --batch_size "${BATCH_SIZE}" \
-  --max_new_tokens "${MAX_NEW_TOKENS}" \
-  --seed 42 \
-  --trust_remote_code \
+common_args=(
+  --model_name_or_path "${BASE_MODEL}"
+  --tokenizer_name_or_path "${BASE_MODEL}"
+  --input_file "${INPUT_FILE}"
+  --batch_size "${BATCH_SIZE}"
+  --max_new_tokens "${MAX_NEW_TOKENS}"
+  --seed 42
+  --trust_remote_code
   --overwrite
+)
+if [[ -n "${NUM_SAMPLES}" ]]; then
+  common_args+=(--num_samples "${NUM_SAMPLES}")
+fi
 
 CUDA_VISIBLE_DEVICES=0 python tools/evaluate_medical_mcqa.py \
-  --model_name_or_path "${BASE_MODEL}" \
+  --output_file "${OUTPUT_ROOT}/base.jsonl" \
+  "${common_args[@]}"
+
+CUDA_VISIBLE_DEVICES=0 python tools/evaluate_medical_mcqa.py \
   --peft_path "${E1_ADAPTER}" \
-  --input_file "${INPUT_FILE}" \
   --output_file "${OUTPUT_ROOT}/e1.jsonl" \
-  --batch_size "${BATCH_SIZE}" \
-  --max_new_tokens "${MAX_NEW_TOKENS}" \
-  --seed 42 \
-  --trust_remote_code \
-  --overwrite
+  "${common_args[@]}"
 
 echo "Base summary: ${OUTPUT_ROOT}/base.summary.json"
 echo "E1 summary:   ${OUTPUT_ROOT}/e1.summary.json"

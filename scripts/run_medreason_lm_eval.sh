@@ -51,12 +51,12 @@ fi
 
 echo "===== Base model ====="
 "${LM_EVAL_BIN}" "${common_args[@]}" \
-  --model_args "pretrained=${BASE_MODEL},dtype=bfloat16" \
+  --model_args "pretrained=${BASE_MODEL},tokenizer=${BASE_MODEL},dtype=bfloat16" \
   --output_path "${OUTPUT_ROOT}/base"
 
 echo "===== E1 LoRA adapter ====="
 "${LM_EVAL_BIN}" "${common_args[@]}" \
-  --model_args "pretrained=${BASE_MODEL},peft=${E1_ADAPTER},dtype=bfloat16" \
+  --model_args "pretrained=${BASE_MODEL},peft=${E1_ADAPTER},tokenizer=${BASE_MODEL},dtype=bfloat16" \
   --output_path "${OUTPUT_ROOT}/e1"
 
 echo "Base results: ${OUTPUT_ROOT}/base"

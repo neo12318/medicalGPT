@@ -79,6 +79,10 @@ def batched(values: list[Any], size: int):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model_name_or_path", required=True)
+    parser.add_argument(
+        "--tokenizer_name_or_path",
+        help="Tokenizer source. Defaults to model_name_or_path.",
+    )
     parser.add_argument("--peft_path")
     parser.add_argument("--input_file", type=Path, required=True)
     parser.add_argument("--output_file", type=Path, required=True)
@@ -117,7 +121,7 @@ def main() -> None:
         raise ValueError("No evaluation samples selected.")
 
     set_seed(args.seed)
-    tokenizer_source = args.peft_path or args.model_name_or_path
+    tokenizer_source = args.tokenizer_name_or_path or args.model_name_or_path
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_source,
         trust_remote_code=args.trust_remote_code,
@@ -139,6 +143,7 @@ def main() -> None:
 
     config = {
         "model_name_or_path": args.model_name_or_path,
+        "tokenizer_name_or_path": tokenizer_source,
         "peft_path": args.peft_path,
         "input_file": str(args.input_file),
         "samples": len(rows),
