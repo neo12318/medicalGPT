@@ -203,7 +203,70 @@ pytest -q \
 Expected counts are 5,000 train and 500 validation. Official training and
 development splits are preserved; test splits are not used for training.
 
-## 5. Stop point before formal GRPO
+## 5. Evaluate Base and E1 before GRPO
+
+Use two complementary evaluations. They answer different questions.
+
+### 5.1 Standard multiple-choice likelihood with lm-evaluation-harness
+
+The repository pins the harness version so later runs use the same task
+definitions and metrics:
+
+```bash
+python -m pip install "lm_eval[hf]==0.4.12"
+
+bash scripts/run_medreason_lm_eval.sh
+```
+
+This runs `medqa_4options` and the repository's explicit
+`medmcqa_explicit` task for both the Base model and the E1 PEFT adapter. It
+records `acc`, `acc_norm`, and per-sample logs under
+`outputs/medreason-eval/lm-eval`.
+
+`lm-eval` scores the conditional likelihood of each option text. This is a
+useful standard knowledge benchmark, but it does not exercise the trained
+`<think>...</think><answer>...</answer>` generation format. Do not use a
+limited smoke run as a reportable metric:
+
+```bash
+LIMIT=20 OUTPUT_ROOT=outputs/medreason-eval/lm-eval-smoke \
+  bash scripts/run_medreason_lm_eval.sh
+```
+
+### 5.2 GRPO-aligned generative evaluation
+
+Run the exact prompt format and strict answer parser that formal GRPO will use:
+
+```bash
+BATCH_SIZE=16 \
+OUTPUT_ROOT=outputs/medreason-eval/generative-500 \
+bash scripts/run_medreason_e1_eval.sh
+```
+
+For a quick diagnostic only:
+
+```bash
+NUM_SAMPLES=50 \
+BATCH_SIZE=8 \
+OUTPUT_ROOT=outputs/medreason-eval/generative-50 \
+bash scripts/run_medreason_e1_eval.sh
+```
+
+The generated summaries include accuracy, format rate, truncation rate, output
+length, and per-source metrics. Compare Base and E1 as paired predictions:
+
+```bash
+python tools/compare_medreason_evaluations.py \
+  --base_file outputs/medreason-eval/generative-500/base.jsonl \
+  --candidate_file outputs/medreason-eval/generative-500/e1.jsonl \
+  --output_file outputs/medreason-eval/generative-500/comparison.json
+```
+
+The comparison reports Base-only and E1-only correct cases plus an exact
+McNemar p-value. This avoids treating two correlated accuracy estimates as
+independent runs.
+
+## 6. Stop point before formal GRPO
 
 Do not start formal GRPO immediately after building the MCQA files. First:
 
