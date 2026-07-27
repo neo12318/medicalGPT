@@ -21,6 +21,9 @@ MAX_COMPLETION_LENGTH="${MAX_COMPLETION_LENGTH:-768}"
 LOGGING_STEPS="${LOGGING_STEPS:-1}"
 SAVE_STEPS="${SAVE_STEPS:-50}"
 LEARNING_RATE="${LEARNING_RATE:-5e-7}"
+NUM_ITERATIONS="${NUM_ITERATIONS:-1}"
+SCALE_REWARDS="${SCALE_REWARDS:-group}"
+RUN_NAME="${RUN_NAME:-medreason-e2-vanilla-grpo}"
 USE_TRANSFORMERS_PAGED="${USE_TRANSFORMERS_PAGED:-True}"
 SEED="${SEED:-42}"
 
@@ -77,7 +80,7 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --logging_first_step True \
   --logging_dir "${OUTPUT_DIR}/runs" \
   --report_to tensorboard \
-  --run_name medreason-e2-vanilla-grpo \
+  --run_name "${RUN_NAME}" \
   --seed "${SEED}" \
   --data_seed "${SEED}" \
   --remove_unused_columns False \
@@ -93,10 +96,10 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --max_grad_norm 1.0 \
   --torch_empty_cache_steps 1 \
   --loss_type grpo \
-  --scale_rewards group \
+  --scale_rewards "${SCALE_REWARDS}" \
   --beta 0.0 \
   --epsilon 0.2 \
-  --num_iterations 1 \
+  --num_iterations "${NUM_ITERATIONS}" \
   --use_vllm False \
   --use_transformers_paged "${USE_TRANSFORMERS_PAGED}" \
   --temperature 0.8 \
