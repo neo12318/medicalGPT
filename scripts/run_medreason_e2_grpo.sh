@@ -23,6 +23,10 @@ SAVE_STEPS="${SAVE_STEPS:-50}"
 LEARNING_RATE="${LEARNING_RATE:-5e-7}"
 NUM_ITERATIONS="${NUM_ITERATIONS:-1}"
 SCALE_REWARDS="${SCALE_REWARDS:-group}"
+LOSS_TYPE="${LOSS_TYPE:-grpo}"
+EPSILON="${EPSILON:-0.2}"
+EPSILON_HIGH="${EPSILON_HIGH:-0.2}"
+MASK_TRUNCATED_COMPLETIONS="${MASK_TRUNCATED_COMPLETIONS:-False}"
 RUN_NAME="${RUN_NAME:-medreason-e2-vanilla-grpo}"
 USE_TRANSFORMERS_PAGED="${USE_TRANSFORMERS_PAGED:-True}"
 SEED="${SEED:-42}"
@@ -95,11 +99,13 @@ CUDA_VISIBLE_DEVICES=0 python training/medical_mcqa_grpo_training.py \
   --weight_decay 0.0 \
   --max_grad_norm 1.0 \
   --torch_empty_cache_steps 1 \
-  --loss_type grpo \
+  --loss_type "${LOSS_TYPE}" \
   --scale_rewards "${SCALE_REWARDS}" \
   --beta 0.0 \
-  --epsilon 0.2 \
+  --epsilon "${EPSILON}" \
+  --epsilon_high "${EPSILON_HIGH}" \
   --num_iterations "${NUM_ITERATIONS}" \
+  --mask_truncated_completions "${MASK_TRUNCATED_COMPLETIONS}" \
   --use_vllm False \
   --use_transformers_paged "${USE_TRANSFORMERS_PAGED}" \
   --temperature 0.8 \
